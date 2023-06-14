@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kółko i krzyżyk</title>
+    <style>
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<h1>Witaj w grze Kółko i krzyżyk!</h1>
+<p>Twoje ID gracza: <span id="player_id">{{ player }}</span></p>
+<p>Twoje kredyty : <span id="credits">{{ credits }}</span></p>
+<p>{{ error }}</p>
+<style>
+    table{
+
+  border-collapse: collapse;
+}
+
+td{
+width: 65px;
+height:65px;
+border: 1px solid black;
+text-align: center;
+font-size: 35px;
+}
+#wrapper{
+  margin: 0 auto;
+}
+h1{
+text-align: center;
+font: italic  1.5rem/1.5 "Arial";
+
+
+#wrapper{
+  width:199px;
+  position:relative;
+}
+button{
+  display:block;
+  margin: 15px auto;
+text-align: center;
+padding: 15px;
+background-color: pink;
+border:none;
+outline: none;
+border-radius: 0.5rem;
+cursor: pointer;
+}
+.clear{
+animation: clear 1s ease-in-out forwards;
+
+}
+@keyframes winner {
+0% {opacity:0;}
+100%{opacity:1;}
+}
+
+@keyframes cross {
+0%{width: 0;}
+100%{width: 199px;}
+}
+
+@keyframes clear{
+0%{opacity:1;}
+100%{opacity:0;}
+}
+
+
+</style>
+<button id="play_button">Play</button>
+
+<div id="game_board" style="display: none;">
+    <table>
+        <tr>
+            <td data-col="0" data-row="0"></td>
+            <td data-col="1" data-row="0"></td>
+            <td data-col="2" data-row="0"></td>
+        </tr>
+        <tr>
+            <td data-col="0" data-row="1"></td>
+            <td data-col="1" data-row="1"></td>
+            <td data-col="2" data-row="1"></td>
+        </tr>
+        <tr>
+            <td data-col="0" data-row="2"></td>
+            <td data-col="1" data-row="2"></td>
+            <td data-col="2" data-row="2"></td>
+        </tr>
+    </table>
+</div>
+<div id="game_message"></div>
+<button id="add_credits_button" style="display: none;">Dodaj kredyty</button>
+<script>
+    // Tworzymy połączenie z serwerem
+    const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+    var gameId=null;
+    // Ustawiamy ID gracza
+    const playerId = "{{ player }}";
+    document.getElementById('player_id').innerText = playerId;
+    $('#play_button').click(function() {
+        $.post('/create_game/' + playerId, function(data) {
+            // Zakładamy, że endpoint zwraca JSONa z identyfikatorem gry
+            gameId = data.id;
+            // Rozpoczynamy grę
+            startGame(gameId);
+        });
+    });
+    $('td').click(function() {
+        const index = $(this).data('data');
+        $(this).text('X');
+         const row = $(this).data('row');
+         const col = $(this).data('col');
+         socket.emit('move', { game_id: gameId, row: row, col: col});
+         $(this).unbind("click");
+    });
+    function startGame(gameId) {
+        changeCredits(-3)
+        gameId=gameId;
+        socket.emit('join', { game_id: gameId });
+        $('#game_board').show();
+        $('#play_button').hide();
+    }
+    socket.on('connect', function() {
+        console.log('Connected to server');
+    });
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server');
+        socket.disconnect();
+        $('#error_message').text("Niespodziewany błąd. Połączenie z serwerem zostało przerwane.").fadeIn('slow');
+    });
+    socket.on('move', function(data) {
+        const returnedGameId = data.game_id;
+        const row = data.row;
+        const col = data.col;
+        console.log(data)
+        if (gameId === returnedGameId) {
+            // Aktualizujemy pole na planszy
+            const cell = $(`td[data-row="${row}"][data-col="${col}"]`);
+            cell.unbind("click");
+            cell.text('O');
+        }
+    });
+    socket.on('draw', function(data) {
+        $('td').unbind("click");
+        $('#game_message').text("Gra zakończyła się remisem!").fadeIn('slow').delay(2000).fadeOut('slow');
+    });
+
+    socket.on('win', function(data) {
+        $('td').unbind("click");
+        if (data.winner === 0) {
+            changeCredits(4)
+            $('#game_message').text("Gratulacje, wygrałeś!").fadeIn('slow').delay(2000).fadeOut('slow');
+        } else {
+            $('#game_message').text("Niestety, przegrałeś. Spróbuj ponownie!").fadeIn('slow').delay(2000).fadeOut('slow');
+        }
+    });
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server');
+        // Tutaj możesz dodać logikę do automatycznego ponownego połączenia.
+    });
+    socket.on('refreshed', function() {
+        // Reset game state here
+    });
+    function changeCredits(creditsInt){
+        let creditsElement = $('#credits');
+        let credits = parseInt(creditsElement.text());
+        credits=credits+ creditsInt;
+        if (credits===0)
+        {
+            $('#add_credits_button').show();
+        }
+        else{
+            $('#add_credits_button').hide();
+        }
+        creditsElement.text(credits);
+    }
+    $('#add_credits_button').click(function() {
+    // Dodajemy 10 kredytów poprzez wywołanie odpowiedniego endpointu na serwerze
+    $.post('/add_credits/' + playerId, function(data) {
+        changeCredits(+10); // Sprawdzamy ponownie liczbę kredytów
+    });
+    });
+    changeCredits(0);
+
+
+
+
+
+
+
+
+</script>
+</body>
+</html>
